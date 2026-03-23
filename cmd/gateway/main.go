@@ -1,4 +1,5 @@
 package main
+
 import (
 	"fmt"
 	"log"
@@ -6,16 +7,18 @@ import (
 
 	"github.com/dgoumtsop/drift/internal/config"
 	"github.com/dgoumtsop/drift/internal/proxy"
-) 
+	"github.com/dgoumtsop/drift/internal/ratelimit"
+)
 
-func main () {
+func main() {
 	cfg, err := config.Load()
-	if err != nil{
+	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	// create the reverse proxy 
-	reverseProxy, err := proxy.New(cfg.BackendURL)
+	// create the reverse proxy
+	rl := ratelimit.New(10, 5)
+	reverseProxy, err := proxy.New(cfg.BackendURL, rl)
 	if err != nil {
 		log.Fatalf("Failed to create proxy: %v", err)
 	}
