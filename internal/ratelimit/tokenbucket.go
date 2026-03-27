@@ -63,7 +63,11 @@ func (rl *RateLimiter) Allow(clientIP string) bool {
 	}
 
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 	return false  // Deny request
+=======
+	return false // Deny request
+>>>>>>> Stashed changes
 =======
 	return false // Deny request
 >>>>>>> Stashed changes
