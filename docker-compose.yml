@@ -1,0 +1,84 @@
+version: "3.9"
+
+services:
+
+  # ── httpbin: acts as the upstream backend ─────────────────────────────────
+  backend:
+    image: kennethreitz/httpbin
+    container_name: drift-backend
+    restart: unless-stopped
+    ports:
+      - "9999:80"
+
+  # ── Redis: shared rate-limit state for distributed deployments ────────────
+  redis:
+    image: redis:7-alpine
+    container_name: drift-redis
+    restart: unless-stopped
+    command: redis-server --save "" --appendonly no  # in-memory only; no disk I/O
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── Drift API gateway ──────────────────────────────────────────────────────
+  gateway:
+    build: .
+    container_name: drift-gateway
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      BACKEND_URL: "http://backend:80"
+      REDIS_URL: "redis:6379"
+      RL_CAPACITY: "10"
+      RL_REFILL_RATE: "5"
+      READ_TIMEOUT: "10s"
+      WRITE_TIMEOUT: "30s"
+      IDLE_TIMEOUT: "60s"
+    ports:
+      - "8080:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_started
+
+  # ── Prometheus ─────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: drift-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    ports:
+      - "9090:9090"
+    depends_on:
+      - gateway
+
+  # ── Grafana ────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: drift-grafana
+    restart: unless-stopped
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  prometheus_data:
+  grafana_data:
