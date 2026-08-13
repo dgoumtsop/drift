@@ -26,10 +26,10 @@ func main() {
 
 	metrics.Register()
 
-	// ── Rate limiter setup ────────────────────────────────────────────────────
+	// Rate limiter setup 
 	// If REDIS_URL is set, use the distributed Redis limiter so all gateway
 	// replicas share a single rate-limit state. Otherwise fall back to the
-	// in-memory limiter (fine for single-instance deployments).
+	// in-memory limiter 
 	var limiter ratelimit.Limiter
 
 	if cfg.RedisURL != "" {
@@ -46,13 +46,13 @@ func main() {
 		limiter = ratelimit.NewInMemory(cfg.RLCapacity, cfg.RLRefillRate)
 	}
 
-	// ── Proxy ────────────────────────────────────────────────────────────────
+	// Proxy 
 	reverseProxy, err := proxy.New(cfg.BackendURL, limiter)
 	if err != nil {
 		log.Fatalf("proxy: %v", err)
 	}
 
-	// ── Dashboard ────────────────────────────────────────────────────────────
+	// Dashboard 
 	hub := dashboard.NewHub()
 	go hub.Run()
 
