@@ -56,14 +56,14 @@ func main() {
 	hub := dashboard.NewHub()
 	go hub.Run()
 
-	// ── Routes ───────────────────────────────────────────────────────────────
+	// Routes
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/dashboard", dashboard.PageHandler)
 	mux.HandleFunc("/dashboard/stream", hub.StreamHandler)
 	mux.HandleFunc("/", reverseProxy.ServeHTTP)
 
-	// ── HTTP server with timeouts ─────────────────────────────────────────────
+	// HTTP server with timeouts
 	// Never use http.ListenAndServe directly — it has no timeouts so a slow
 	// client can hold a connection open forever and exhaust file descriptors.
 	addr := fmt.Sprintf(":%s", cfg.Port)
@@ -88,7 +88,7 @@ func main() {
 		}
 	}()
 
-	// ── Graceful shutdown ─────────────────────────────────────────────────────
+	//  Graceful shutdown 
 	// Block until SIGINT or SIGTERM, then give in-flight requests 30s to finish.
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
