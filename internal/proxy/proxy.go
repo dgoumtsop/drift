@@ -19,7 +19,7 @@ type ReverseProxy struct {
 	rateLimiter ratelimit.Limiter // interface — works with in-memory or Redis
 }
 
-// New creates a gateway proxy that forwards traffic to backendURL.
+// New creates a gateway proxy that forwards traffic to backendURL
 // rateLimiter can be either *ratelimit.InMemoryLimiter or *ratelimit.RedisLimiter.
 func New(backendURL string, rateLimiter ratelimit.Limiter) (*ReverseProxy, error) {
 	target, err := url.Parse(backendURL)
