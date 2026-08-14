@@ -34,7 +34,7 @@ var (
 )
 
 // Atomic counters consumed by the live dashboard.
-// Updated in lockstep with Prometheus metrics — avoids parsing DTO on every tick.
+// Updated in lockstep with Prometheus metrics
 var (
 	AtomicRequests     atomic.Int64
 	AtomicRateLimited  atomic.Int64
