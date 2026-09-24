@@ -1,6 +1,6 @@
 <div align="center">
 
-# drift
+# Drift - Distributed API Gateway
 
 **A production-grade API gateway built from scratch in Go**
 
