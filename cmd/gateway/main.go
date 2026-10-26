@@ -47,7 +47,7 @@ func main() {
 	}
 
 	// Proxy 
-	reverseProxy, err := proxy.New(cfg.BackendURL, limiter)
+	reverseProxy, err := proxy.New(cfg.BackendURL, limiter, cfg.TrustProxyHeaders)
 	if err != nil {
 		log.Fatalf("proxy: %v", err)
 	}

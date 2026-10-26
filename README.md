@@ -151,6 +151,7 @@ All config is environment-based with safe defaults.
 | `READ_TIMEOUT` | `10s` | HTTP server read timeout |
 | `WRITE_TIMEOUT` | `30s` | HTTP server write timeout |
 | `IDLE_TIMEOUT` | `60s` | HTTP server idle connection timeout |
+| `TRUST_PROXY_HEADERS` | `false` | Use `X-Forwarded-For` / `X-Real-IP` for client IP. Only enable behind a trusted load balancer |
 
 ---
 
@@ -238,6 +239,22 @@ Three scenarios run sequentially:
 - `http_req_failed` < 1% (non-429 errors)
 - `drift_proxy_latency_ms` p95 < 500ms
 
+All k6 traffic comes from one IP, so most of the spike gets 429s. That's the limiter working, and 429s don't count as failures.
+
+---
+
+## Tests
+
+```bash
+go test -race ./...
+```
+
+- **Rate limiter:** per-IP buckets, refill, and a 500-goroutine test that checks the limiter never lets more than `capacity` requests through
+- **Proxy:** forwards to a fake backend, returns 429 with `Retry-After`, returns 502 when the upstream is down, and can't be bypassed with spoofed `X-Forwarded-For`
+- **IP extraction:** IPv4, IPv6, and trusted vs. untrusted headers
+
+CI runs vet, race-enabled tests, and a Docker build on every push.
+
 ---
 
 ## Project structure
@@ -267,7 +284,9 @@ drift/
 
 ## Known edge cases and decisions
 
-**X-Forwarded-For spoofing** — clients can forge `X-Forwarded-For`. In production, only trust this header if the request comes from a known trusted proxy (your LB's IP). For a learning project behind a local Docker network, this is acceptable.
+**X-Forwarded-For spoofing** — clients can forge `X-Forwarded-For`, so by default the gateway ignores it and rate-limits on the TCP peer address. A client rotating fake IPs in the header can't dodge the limiter. Set `TRUST_PROXY_HEADERS=true` only when drift sits behind a load balancer you control that overwrites the header.
+
+**Redis outage** — if Redis stops responding, the Redis limiter fails open: requests keep flowing unlimited instead of the gateway going down. That's a deliberate availability-over-protection trade-off.
 
 **In-memory limiter and horizontal scaling** — if you run multiple gateway instances without Redis, each has its own bucket map. The effective rate limit per client becomes `N × capacity` across N replicas. Use Redis mode for true horizontal scaling.
 

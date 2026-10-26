@@ -24,6 +24,11 @@ type Config struct {
 	RedisURL     string
 	RLCapacity   float64 // max tokens per bucket
 	RLRefillRate float64 // tokens added per second
+
+	// Only read X-Forwarded-For / X-Real-IP when the gateway sits behind a
+	// trusted load balancer. Otherwise any client can forge a new IP per
+	// request and skip the rate limiter entirely.
+	TrustProxyHeaders bool
 }
 
 func Load() (*Config, error) {
@@ -38,6 +43,8 @@ func Load() (*Config, error) {
 		RedisURL:     getEnv("REDIS_URL", ""),
 		RLCapacity:   getFloat("RL_CAPACITY", 10),
 		RLRefillRate: getFloat("RL_REFILL_RATE", 5),
+
+		TrustProxyHeaders: getEnv("TRUST_PROXY_HEADERS", "false") == "true",
 	}, nil
 }
 

@@ -15,19 +15,31 @@ import (
 
 // ReverseProxy wraps httputil.ReverseProxy with rate limiting and observability.
 type ReverseProxy struct {
-	proxy       *httputil.ReverseProxy
-	rateLimiter ratelimit.Limiter // interface — works with in-memory or Redis
+	proxy             *httputil.ReverseProxy
+	rateLimiter       ratelimit.Limiter // interface — works with in-memory or Redis
+	trustProxyHeaders bool
 }
 
 // New creates a gateway proxy that forwards traffic to backendURL
 // rateLimiter can be either *ratelimit.InMemoryLimiter or *ratelimit.RedisLimiter.
-func New(backendURL string, rateLimiter ratelimit.Limiter) (*ReverseProxy, error) {
+// trustProxyHeaders controls whether X-Forwarded-For / X-Real-IP are used
+// to identify the client (only safe behind a trusted load balancer).
+func New(backendURL string, rateLimiter ratelimit.Limiter, trustProxyHeaders bool) (*ReverseProxy, error) {
 	target, err := url.Parse(backendURL)
 	if err != nil {
 		return nil, err
 	}
 
 	rp := httputil.NewSingleHostReverseProxy(target)
+
+	// NewSingleHostReverseProxy keeps the client's Host header, so a hosted
+	// backend like httpbin.org would see "localhost:8080" and fail to route.
+	// Send the backend its own host instead.
+	defaultDirector := rp.Director
+	rp.Director = func(r *http.Request) {
+		defaultDirector(r)
+		r.Host = target.Host
+	}
 
 	// Give the upstream a 20-second response-header deadline so a hung
 	// backend doesn't hold a connection open indefinitely.
@@ -49,8 +61,9 @@ func New(backendURL string, rateLimiter ratelimit.Limiter) (*ReverseProxy, error
 	}
 
 	return &ReverseProxy{
-		proxy:       rp,
-		rateLimiter: rateLimiter,
+		proxy:             rp,
+		rateLimiter:       rateLimiter,
+		trustProxyHeaders: trustProxyHeaders,
 	}, nil
 }
 
@@ -61,7 +74,7 @@ func (rp *ReverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	metrics.RequestsTotal.WithLabelValues(r.Method, r.URL.Path).Inc()
 	metrics.AtomicRequests.Add(1)
 
-	clientIP := extractIP(r)
+	clientIP := extractIP(r, rp.trustProxyHeaders)
 	allowed, err := rp.rateLimiter.Allow(clientIP)
 	if err != nil {
 		// Limiter returned an error (e.g. Redis down). We already logged it
@@ -88,25 +101,27 @@ func (rp *ReverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // extractIP returns the real client IP from the request.
 //
-// Priority:
+// Priority (headers only when trustProxyHeaders is set):
 //  1. X-Forwarded-For (set by load balancers / reverse proxies)
 //  2. X-Real-IP (set by Nginx)
 //  3. RemoteAddr (direct connection)
 //
 // Using strings.Split(RemoteAddr, ":")[0] is broken for IPv6 addresses
 // like [::1]:8080 — net.SplitHostPort handles both IPv4 and IPv6.
-func extractIP(r *http.Request) string {
-	// X-Forwarded-For may contain a comma-separated list; take the first
-	// (leftmost) entry which is the original client.
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		parts := strings.Split(xff, ",")
-		if ip := strings.TrimSpace(parts[0]); ip != "" {
-			return ip
+func extractIP(r *http.Request, trustProxyHeaders bool) string {
+	if trustProxyHeaders {
+		// X-Forwarded-For may contain a comma-separated list; take the first
+		// (leftmost) entry which is the original client.
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			parts := strings.Split(xff, ",")
+			if ip := strings.TrimSpace(parts[0]); ip != "" {
+				return ip
+			}
 		}
-	}
 
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		return strings.TrimSpace(xri)
+		if xri := r.Header.Get("X-Real-IP"); xri != "" {
+			return strings.TrimSpace(xri)
+		}
 	}
 
 	host, _, err := net.SplitHostPort(r.RemoteAddr)

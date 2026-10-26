@@ -115,7 +115,7 @@ func (rl *RedisLimiter) Allow(ip string) (bool, error) {
 
 	if err != nil {
 		// Redis unavailable — fail open so the gateway stays up.
-		// The in-memory limiter in main.go acts as a secondary guard.
+		// Requests are unlimited until Redis comes back.
 		log.Printf("[ratelimit] redis error (failing open): %v", err)
 		return true, fmt.Errorf("redis error: %w", err)
 	}

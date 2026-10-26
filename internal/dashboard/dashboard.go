@@ -140,6 +140,12 @@ func (h *Hub) StreamHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The server's WriteTimeout would otherwise kill this long-lived stream
+	// after 30s. Clear the deadline for this connection only.
+	if err := http.NewResponseController(w).SetWriteDeadline(time.Time{}); err != nil {
+		log.Printf("[dashboard] could not clear write deadline: %v", err)
+	}
+
 	c := &client{ch: make(chan []byte, 16)}
 	h.add(c)
 	defer h.remove(c)
